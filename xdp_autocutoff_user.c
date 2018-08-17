@@ -66,12 +66,6 @@ static void usage(char *argv[])
     printf("\n");
 }
 
-#define MAX_KEYS    256
-
-struct ttl_stats {
-    __u64 data[MAX_KEYS];
-};
-
 struct flowv4_keys {
     __u32 src;
     __u32 dst;

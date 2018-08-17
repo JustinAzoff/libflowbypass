@@ -1,6 +1,7 @@
-/*  XDP example of parsing TTL value of IP-header.
+/*  XDP example of cutting off flows after a packet or byte limit.
  *
  *  Copyright(c) 2017 Jesper Dangaard Brouer, Red Hat, Inc.
+ *  Copyright(c) 2018 Justin Azoff
  */
 #define KBUILD_MODNAME "foo"
 #include <uapi/linux/bpf.h>
@@ -213,8 +214,8 @@ u32 handle_eth_protocol(struct xdp_md *ctx, u16 eth_proto, u64 l3_offset)
 }
 
 
-SEC("xdp_ttl")
-int  xdp_ttl_program(struct xdp_md *ctx)
+SEC("xdp_autocutoff")
+int  xdp_autocutoff_program(struct xdp_md *ctx)
 {
     void *data_end = (void *)(long)ctx->data_end;
     void *data     = (void *)(long)ctx->data;
