@@ -76,6 +76,16 @@ struct flowv4_keys {
     __u32 ip_proto;
 } __attribute__((__aligned__(8)));
 
+struct flowv6_keys {
+    __u32 src[4];
+    __u32 dst[4];
+    union {
+        __u32 ports;
+        __u16 port16[2];
+    };
+    __u32 ip_proto;
+} __attribute__((__aligned__(8)));
+
 struct pair {
     __u64 time;
     __u64 packets;
@@ -92,17 +102,22 @@ struct pair {
     ((ip >> 16) & 0xFF), \
     ((ip >> 24) & 0xFF)
 
+#define V6_IP_FORMAT "%s"
+#define V6_IP_FORMAT_V(ip) "..."
+
 
 static bool expire_flows()
 {
     struct flowv4_keys key = {}, next_key;
+    struct flowv6_keys key6 = {}, next_key6;
     unsigned int nr_cpus = bpf_num_possible_cpus();
     //printf("CPUS: %d\n", nr_cpus);
     struct pair values[nr_cpus];
     int i;
     struct timespec curtime;
     clock_gettime(CLOCK_MONOTONIC, &curtime);
-    int flows_total=0, flows_expired=0;
+    int flows_expired=0;
+    int flows_total_v4=0, flows_total_v6=0;
 
     while (bpf_map_get_next_key(map_fd[0], &key, &next_key) == 0) {
         int res = bpf_map_lookup_elem(map_fd[0], &key, values);
@@ -112,15 +127,15 @@ static bool expire_flows()
             continue;
         }
 
-        flows_total++;
+        flows_total_v4++;
         for (i = 0; i < nr_cpus; i++) {
             if(values[i].time) {
                 int age = curtime.tv_sec - values[i].time / 1000000000;
                 if (age > FLOW_TIMEOUT) {
-                    bpf_map_delete_elem(map_fd[0], &key);
                     printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
                         V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
+                    bpf_map_delete_elem(map_fd[0], &key);
                     flows_expired++;
                 }
             }
@@ -128,15 +143,39 @@ static bool expire_flows()
         }
         key = next_key;
     }
-    printf("Flows: total=%d expired=%d\n", flows_total, flows_expired);
+    while (bpf_map_get_next_key(map_fd[1], &key6, &next_key6) == 0) {
+        int res = bpf_map_lookup_elem(map_fd[1], &key6, values);
+        if (res < 0) {
+            //printf("no entry in v6 table for %d -> %d\n", key.port16[0], key.port16[1]);
+            key6 = next_key6;
+            continue;
+        }
+
+        flows_total_v6++;
+        for (i = 0; i < nr_cpus; i++) {
+            if(values[i].time) {
+                int age = curtime.tv_sec - values[i].time / 1000000000;
+                if (age > FLOW_TIMEOUT) {
+                    printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
+                        V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
+                    printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
+                    bpf_map_delete_elem(map_fd[1], &key6);
+                    flows_expired++;
+                }
+            }
+
+        }
+        key6 = next_key6;
+    }
+    printf("Flows: total=%d v4=%d v6=%d expired=%d\n", flows_total_v4+flows_total_v6, flows_total_v4, flows_total_v6, flows_expired);
     return false;
 }
 
 static void flows_poll(int interval)
 {
     while (1) {
-        expire_flows();
         sleep(interval);
+        expire_flows();
     }
 }
 

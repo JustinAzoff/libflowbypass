@@ -9,14 +9,15 @@
 #include <uapi/linux/if_packet.h>
 #include <uapi/linux/if_vlan.h>
 #include <uapi/linux/ip.h>
+#include <uapi/linux/ipv6.h>
 #include <uapi/linux/in.h>
 #include <uapi/linux/udp.h>
 #include <uapi/linux/tcp.h>
 #include "bpf_helpers.h"
 
 #define MAX_FLOWS 512*1024
-#define CUTOFF_PACKETS 1024
-#define CUTOFF_BYTES 512*1024
+#define CUTOFF_PACKETS 5024
+#define CUTOFF_BYTES 1*1024*1024
 
 struct flowv4_keys {
     __u32 src;
@@ -28,6 +29,17 @@ struct flowv4_keys {
     __u32 ip_proto;
 } __attribute__((__aligned__(8)));
 
+struct flowv6_keys {
+    __u32 src[4];
+    __u32 dst[4];
+    union {
+        __u32 ports;
+        __u16 port16[2];
+    };
+    __u32 ip_proto;
+} __attribute__((__aligned__(8)));
+
+
 struct pair {
     __u64 time;
     __u64 packets;
@@ -37,6 +49,13 @@ struct pair {
 struct bpf_map_def SEC("maps") flow_table_v4 = {
     .type = BPF_MAP_TYPE_PERCPU_HASH,
     .key_size = sizeof(struct flowv4_keys),
+    .value_size = sizeof(struct pair),
+    .max_entries = MAX_FLOWS,
+};
+
+struct bpf_map_def SEC("maps") flow_table_v6 = {
+    .type = BPF_MAP_TYPE_PERCPU_HASH,
+    .key_size = sizeof(struct flowv6_keys),
     .value_size = sizeof(struct pair),
     .max_entries = MAX_FLOWS,
 };
@@ -197,6 +216,54 @@ u32 parse_ipv4(struct xdp_md *ctx, u64 l3_offset)
 }
 
 static __always_inline
+u32 parse_ipv6(struct xdp_md *ctx, u64 l3_offset)
+{
+    void *data_end = (void *)(long)ctx->data_end;
+    void *data     = (void *)(long)ctx->data;
+    struct ipv6hdr *ip6h = data + l3_offset;
+    int dport;
+    int sport;
+    struct flowv6_keys tuple;
+    struct pair *value;
+    struct pair new_value;
+
+    if ((void *)(ip6h + 1) > data_end)
+        return 0;
+    if (!((ip6h->nexthdr == IPPROTO_UDP) || (ip6h->nexthdr == IPPROTO_TCP)))
+        return XDP_PASS;
+
+    dport = get_dport(ip6h + 1, data_end, ip6h->nexthdr);
+    if (dport == -1)
+        return XDP_PASS;
+
+    sport = get_sport(ip6h + 1, data_end, ip6h->nexthdr);
+    if (sport == -1)
+        return XDP_PASS;
+
+    tuple.ip_proto = ip6h->nexthdr;
+    __builtin_memcpy(tuple.src, ip6h->saddr.s6_addr32, sizeof(tuple.src));
+    __builtin_memcpy(tuple.dst, ip6h->daddr.s6_addr32, sizeof(tuple.dst));
+    tuple.port16[0] = sport;
+    tuple.port16[1] = dport;
+
+    value = bpf_map_lookup_elem(&flow_table_v6, &tuple);
+    if (value) {
+        value->time = bpf_ktime_get_ns();
+        value->packets++;
+        value->bytes += data_end - data;
+        if (value->packets > CUTOFF_PACKETS || value->bytes > CUTOFF_BYTES)
+            return XDP_DROP;
+    } else {
+        new_value.time = bpf_ktime_get_ns();
+        new_value.packets = 0;
+        new_value.bytes = 0;
+        bpf_debug("New flow v6: %d -> %d\n", sport, dport);
+        bpf_map_update_elem(&flow_table_v6, &tuple, &new_value, BPF_NOEXIST);
+    }
+    return XDP_PASS;
+}
+
+static __always_inline
 u32 handle_eth_protocol(struct xdp_md *ctx, u16 eth_proto, u64 l3_offset)
 {
     switch (eth_proto) {
@@ -204,6 +271,8 @@ u32 handle_eth_protocol(struct xdp_md *ctx, u16 eth_proto, u64 l3_offset)
         return parse_ipv4(ctx, l3_offset);
         break;
     case ETH_P_IPV6: /* Not handler for IPv6 yet*/
+        return parse_ipv6(ctx, l3_offset);
+        break;
     case ETH_P_ARP:  /* Let OS handle ARP */
         /* Fall-through */
     default:
