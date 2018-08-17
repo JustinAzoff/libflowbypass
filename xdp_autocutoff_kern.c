@@ -13,6 +13,10 @@
 #include <uapi/linux/tcp.h>
 #include "bpf_helpers.h"
 
+#define MAX_FLOWS 512*1024
+#define CUTOFF_PACKETS 1024
+#define CUTOFF_BYTES 512*1024
+
 struct flowv4_keys {
     __u32 src;
     __u32 dst;
@@ -33,7 +37,7 @@ struct bpf_map_def SEC("maps") flow_table_v4 = {
     .type = BPF_MAP_TYPE_PERCPU_HASH,
     .key_size = sizeof(struct flowv4_keys),
     .value_size = sizeof(struct pair),
-    .max_entries = 32768,
+    .max_entries = MAX_FLOWS,
 };
 
 static __always_inline int get_sport(void *trans_data, void *data_end,
@@ -179,7 +183,7 @@ u32 parse_ipv4(struct xdp_md *ctx, u64 l3_offset)
         value->time = bpf_ktime_get_ns();
         value->packets++;
         value->bytes += data_end - data;
-        if (value->packets > 1000 || value->bytes > 128*1024)
+        if (value->packets > CUTOFF_PACKETS || value->bytes > CUTOFF_BYTES)
             return XDP_DROP;
     } else {
         new_value.time = bpf_ktime_get_ns();
