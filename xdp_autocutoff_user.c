@@ -5,6 +5,7 @@ static const char *__doc__=
 
 #include <assert.h>
 #include <errno.h>
+#include <arpa/inet.h>
 #include <net/if.h>
 #include <signal.h>
 #include <stdio.h>
@@ -90,7 +91,7 @@ struct pair {
 
 #define FLOW_TIMEOUT 10
 
-static bool stats_collect(struct ttl_stats *record)
+static bool expire_flows()
 {
     struct flowv4_keys key = {}, next_key;
     unsigned int nr_cpus = bpf_num_possible_cpus();
@@ -117,7 +118,7 @@ static bool stats_collect(struct ttl_stats *record)
                     flows_expired++;
                     bpf_map_delete_elem(map_fd[0], &key);
                     printf("Expired Flow v4: %u:%d -> %u:%d ", key.src, ntohs(key.port16[0]), key.dst, ntohs(key.port16[1]));
-                    printf("Data: t:%lu p:%lu n:%lu\n", values[i].time, values[i].packets, values[i].bytes);
+                    printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
                 }
             }
 
@@ -128,50 +129,10 @@ static bool stats_collect(struct ttl_stats *record)
     return false;
 }
 
-static void stats_print_headers(void)
+static void flows_poll(int interval)
 {
-    static unsigned int i;
-#define DEBUG 1
-#ifdef  DEBUG
-    {
-    int debug_notice_interval = 3;
-    char msg[] =
-        "\nDebug outout avail via:\n"
-        " sudo cat /sys/kernel/debug/tracing/trace_pipe\n\n";
-    printf(msg, debug_notice_interval);
-    }
-#endif
-    i++;
-    printf("Stats: %d\n", i);
-}
-
-static void stats_print(struct ttl_stats *record)
-{
-    const unsigned int nr_keys = MAX_KEYS;
-    __u64 count;
-    __u32 ttl;
-
-    /* clear screen */
-    printf("\033[2J");
-
-    stats_print_headers();
-    for (ttl = 0; ttl < nr_keys; ttl++) {
-        count = record->data[ttl];
-        if (count)
-            printf("TTL: %3d count:%llu\n", ttl, count);
-    }
-}
-
-static void stats_poll(int interval)
-{
-    struct ttl_stats record;
-
     while (1) {
-        memset(&record, 0, sizeof(record));
-
-        if (stats_collect(&record))
-            stats_print(&record);
-
+        expire_flows();
         sleep(interval);
     }
 }
@@ -240,7 +201,17 @@ int main(int argc, char **argv)
         return EXIT_FAIL_XDP;
     }
 
-    stats_poll(1);
+#define DEBUG 1
+#ifdef  DEBUG
+    {
+    char msg[] =
+        "\nDebug outout avail via:\n"
+        " sudo cat /sys/kernel/debug/tracing/trace_pipe\n\n";
+    printf(msg);
+    }
+#endif
+
+    flows_poll(1);
 
     return EXIT_OK;
 }
