@@ -1,10 +1,11 @@
 /* Copyright(c) 2017 Jesper Dangaard Brouer, Red Hat, Inc.
  */
 static const char *__doc__=
- " XDP example of parsing TTL value of IP-header.";
+ " XDP example of cutting off flows after a packet or byte limit.";
 
 #include <assert.h>
 #include <errno.h>
+#include <net/if.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,6 +99,7 @@ static bool stats_collect(struct ttl_stats *record)
     int i;
     struct timespec curtime;
     clock_gettime(CLOCK_MONOTONIC, &curtime);
+    int flows_total=0, flows_expired=0;
 
     while (bpf_map_get_next_key(map_fd[0], &key, &next_key) == 0) {
         int res = bpf_map_lookup_elem(map_fd[0], &key, values);
@@ -107,19 +109,22 @@ static bool stats_collect(struct ttl_stats *record)
             continue;
         }
 
+        flows_total++;
         for (i = 0; i < nr_cpus; i++) {
             if(values[i].time) {
                 int age = curtime.tv_sec - values[i].time / 1000000000;
                 if (age > FLOW_TIMEOUT) {
+                    flows_expired++;
                     bpf_map_delete_elem(map_fd[0], &key);
-                    printf("Expired Flow v4: %u:%d -> %u:%d ", key.src, key.port16[0], key.dst, key.port16[1]);
-                    printf("Data: t:%lu p:%lu n:%lu age: %d\n", values[i].time, values[i].packets, values[i].bytes, age);
+                    printf("Expired Flow v4: %u:%d -> %u:%d ", key.src, ntohs(key.port16[0]), key.dst, ntohs(key.port16[1]));
+                    printf("Data: t:%lu p:%lu n:%lu\n", values[i].time, values[i].packets, values[i].bytes);
                 }
             }
 
         }
         key = next_key;
 	}
+    printf("Flows: total=%d expired=%d\n", flows_total, flows_expired);
 	return false;
 }
 
