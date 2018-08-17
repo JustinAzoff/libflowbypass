@@ -91,6 +91,14 @@ struct pair {
 
 #define FLOW_TIMEOUT 10
 
+#define V4_IP_FORMAT "%d.%d.%d.%d"
+#define V4_IP_FORMAT_V(ip) \
+    (ip & 0xFF), \
+    ((ip >> 8) & 0xFF), \
+    ((ip >> 16) & 0xFF), \
+    ((ip >> 24) & 0xFF)
+
+
 static bool expire_flows()
 {
     struct flowv4_keys key = {}, next_key;
@@ -115,10 +123,11 @@ static bool expire_flows()
             if(values[i].time) {
                 int age = curtime.tv_sec - values[i].time / 1000000000;
                 if (age > FLOW_TIMEOUT) {
-                    flows_expired++;
                     bpf_map_delete_elem(map_fd[0], &key);
-                    printf("Expired Flow v4: %u:%d -> %u:%d ", key.src, ntohs(key.port16[0]), key.dst, ntohs(key.port16[1]));
+                    printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
+                        V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
+                    flows_expired++;
                 }
             }
 
@@ -211,7 +220,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    flows_poll(1);
+    flows_poll(5);
 
     return EXIT_OK;
 }
