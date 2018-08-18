@@ -208,7 +208,7 @@ u32 parse_ipv4(struct xdp_md *ctx, u64 l3_offset)
     } else {
         new_value.time = bpf_ktime_get_ns();
         new_value.packets = 1;
-        new_value.bytes = data_end - data
+        new_value.bytes = data_end - data;
         bpf_debug("New flow v4: %u -> %u %d\n", tuple.src, tuple.dst, dport);
         bpf_map_update_elem(&flow_table_v4, &tuple, &new_value, BPF_NOEXIST);
     }
@@ -256,7 +256,7 @@ u32 parse_ipv6(struct xdp_md *ctx, u64 l3_offset)
     } else {
         new_value.time = bpf_ktime_get_ns();
         new_value.packets = 1;
-        new_value.bytes = data_end - data
+        new_value.bytes = data_end - data;
         bpf_debug("New flow v6: %d -> %d\n", sport, dport);
         bpf_map_update_elem(&flow_table_v6, &tuple, &new_value, BPF_NOEXIST);
     }
