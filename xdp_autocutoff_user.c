@@ -18,9 +18,11 @@ static const char *__doc__=
 #include <sys/resource.h>
 #include <getopt.h>
 
+#include "tools/lib/bpf/bpf.h"
+#include "tools/lib/bpf/libbpf.h"
 #include "libbpf.h"
-#include "bpf_load.h"
 #include "bpf_util.h"
+
 
 static int ifindex = -1;
 
@@ -29,7 +31,7 @@ static void int_exit(int sig)
     fprintf(stderr, "Interrupted: Removing XDP program on ifindex:%d\n",
         ifindex);
     if (ifindex > -1)
-        set_link_xdp_fd(ifindex, -1, 0);
+        bpf_set_link_xdp_fd(ifindex, -1, 0);
     exit(0);
 }
 
@@ -106,7 +108,7 @@ struct pair {
 #define V6_IP_FORMAT_V(ip) "..."
 
 
-static bool expire_flows()
+static bool expire_flows(int v4_fd, int v6_fd)
 {
     struct flowv4_keys key = {}, next_key;
     struct flowv6_keys key6 = {}, next_key6;
@@ -119,8 +121,8 @@ static bool expire_flows()
     int flows_expired=0;
     int flows_total_v4=0, flows_total_v6=0;
 
-    while (bpf_map_get_next_key(map_fd[0], &key, &next_key) == 0) {
-        int res = bpf_map_lookup_elem(map_fd[0], &key, values);
+    while (bpf_map_get_next_key(v4_fd, &key, &next_key) == 0) {
+        int res = bpf_map_lookup_elem(v4_fd, &key, values);
         if (res < 0) {
             //printf("no entry in v4 table for %d -> %d\n", key.port16[0], key.port16[1]);
             key = next_key;
@@ -135,7 +137,7 @@ static bool expire_flows()
                     printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
                         V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
-                    bpf_map_delete_elem(map_fd[0], &key);
+                    bpf_map_delete_elem(v4_fd, &key);
                     flows_expired++;
                 }
             }
@@ -143,8 +145,8 @@ static bool expire_flows()
         }
         key = next_key;
     }
-    while (bpf_map_get_next_key(map_fd[1], &key6, &next_key6) == 0) {
-        int res = bpf_map_lookup_elem(map_fd[1], &key6, values);
+    while (bpf_map_get_next_key(v6_fd, &key6, &next_key6) == 0) {
+        int res = bpf_map_lookup_elem(v6_fd, &key6, values);
         if (res < 0) {
             //printf("no entry in v6 table for %d -> %d\n", key.port16[0], key.port16[1]);
             key6 = next_key6;
@@ -159,7 +161,7 @@ static bool expire_flows()
                     printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
                         V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
-                    bpf_map_delete_elem(map_fd[1], &key6);
+                    bpf_map_delete_elem(v6_fd, &key6);
                     flows_expired++;
                 }
             }
@@ -168,24 +170,45 @@ static bool expire_flows()
         key6 = next_key6;
     }
     printf("Flows: total=%d v4=%d v6=%d expired=%d\n", flows_total_v4+flows_total_v6, flows_total_v4, flows_total_v6, flows_expired);
+
     return false;
 }
 
-static void flows_poll(int interval)
+static int flows_poll(struct bpf_object *pobj, int interval)
 {
+    struct bpf_map *flow_table_v4 = bpf_object__find_map_by_name(pobj, "flow_table_v4");
+    struct bpf_map *flow_table_v6 = bpf_object__find_map_by_name(pobj, "flow_table_v6");
+    if(flow_table_v4==NULL) {
+        fprintf(stderr, "Can't find map flow_table_v4");
+        return EXIT_FAIL;
+    }
+    if(flow_table_v6==NULL) {
+        fprintf(stderr, "Can't find map flow_table_v6");
+        return EXIT_FAIL;
+    }
+
+    int v4_fd = bpf_map__fd(flow_table_v4);
+    int v6_fd = bpf_map__fd(flow_table_v6);
+
     while (1) {
         sleep(interval);
-        expire_flows();
+        expire_flows(v4_fd, v6_fd);
     }
+    return EXIT_OK;
 }
 
+#define MAX_PROGS 32
 int main(int argc, char **argv)
 {
+    int ret;
     struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
     char filename[256];
     int longindex = 0;
     int opt;
     char *ifname=NULL;
+
+    struct bpf_object *pobj;
+    int prog_fd[MAX_PROGS];
 
     snprintf(filename, sizeof(filename), "%s_kern.o", argv[0]);
 
@@ -225,8 +248,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (load_bpf_file(filename)) {
-        printf("%s", bpf_log_buf);
+    if((ret=bpf_prog_load(filename, BPF_PROG_TYPE_XDP, &pobj, prog_fd)) < 0) {
+        printf("bpf_prog_load: %s\n", strerror(ret));
         return 1;
     }
 
@@ -238,9 +261,14 @@ int main(int argc, char **argv)
     /* Remove XDP program when program is interrupted */
     signal(SIGINT, int_exit);
 
-    if (set_link_xdp_fd(ifindex, prog_fd[0], 0) < 0) {
+    if (bpf_set_link_xdp_fd(ifindex, prog_fd[0], 0) < 0) {
         printf("link set xdp fd failed\n");
         return EXIT_FAIL_XDP;
+    }
+
+    if((ret=bpf_object__pin(pobj, "/sys/fs/bpf/autocutoff") < 0)) {
+        printf("bpf_object__pin: %s\n", strerror(errno));
+        //return 1;
     }
 
 #define DEBUG 1
@@ -253,7 +281,6 @@ int main(int argc, char **argv)
     }
 #endif
 
-    flows_poll(5);
 
-    return EXIT_OK;
+    return flows_poll(pobj, 5);
 }

@@ -58,7 +58,7 @@ CFLAGS += -I./tools/include
 # For building libbpf there is a lot of kernel includes in tools/include/
 CFLAGS += -I$(KERNEL)/tools/include
 #CFLAGS += -I$(KERNEL)/tools/perf
-CFLAGS += -I$(KERNEL)/usr/include
+CFLAGS += -I$(KERNEL)/tools/include/uapi
 # Strange dependency to "selftests" due to "bpf_util.h"
 #CFLAGS += -I$(KERNEL)/tools/testing/selftests/bpf/
 
@@ -67,10 +67,10 @@ LDFLAGS= -lelf
 # Objects that xxx_user program is linked with:
 OBJECT_BPF_SYSCALLS  = tools/lib/bpf/bpf.o
 OBJECT_LOADBPF = bpf_load.o
-OBJECTS = $(OBJECT_BPF_SYSCALLS) $(OBJECT_LOADBPF)
 #
 # The tools/lib/bpf/libbpf is avail via a library
-OBJECT_BPF_LIBBPF  = tools/lib/bpf/libbpf.o
+OBJECT_BPF_LIBBPF  = tools/lib/bpf/libbpf.o tools/lib/bpf/nlattr.o
+OBJECTS = $(OBJECT_BPF_SYSCALLS) $(OBJECT_BPF_LIBBPF)
 
 # Allows pointing LLC/CLANG to another LLVM backend, redefine on cmdline:
 #  make LLC=~/git/llvm/build/bin/llc CLANG=~/git/llvm/build/bin/clang
