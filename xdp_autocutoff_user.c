@@ -266,10 +266,12 @@ int main(int argc, char **argv)
         return EXIT_FAIL_XDP;
     }
 
+    #ifdef PIN_MAPS_SOMEWHAT_BROKEN
     if((ret=bpf_object__pin(pobj, "/sys/fs/bpf/autocutoff") < 0)) {
         printf("bpf_object__pin: %s\n", strerror(errno));
         //return 1;
     }
+    #endif
 
 #define DEBUG 1
 #ifdef  DEBUG
