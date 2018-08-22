@@ -88,6 +88,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
     clock_gettime(CLOCK_MONOTONIC, &curtime);
     int flows_expired=0;
     int flows_total_v4=0, flows_total_v6=0;
+    int do_expire = 0;
 
     while (bpf_map_get_next_key(v4_fd, &prev_key, &key) == 0) {
         int res = bpf_map_lookup_elem(v4_fd, &key, values);
@@ -99,18 +100,23 @@ static bool expire_flows(int v4_fd, int v6_fd)
         }
 
         flows_total_v4++;
+        do_expire = 1;
         for (i = 0; i < nr_cpus; i++) {
-            if(values[i].time) {
-                int age = curtime.tv_sec - values[i].time / 1000000000;
-                if (age > FLOW_TIMEOUT_SECONDS) {
-                    printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
-                        V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
-                    printf("i=%d t=%llu packets=%llu bytes=%llu\n", i, values[i].time / 1000000000, values[i].packets, values[i].bytes);
-                    bpf_map_delete_elem(v4_fd, &key);
-                    flows_expired++;
-                }
+            int age = curtime.tv_sec - values[i].time / 1000000000;
+            if (age < FLOW_TIMEOUT_SECONDS) {
+                printf("not Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
+                    V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
+                printf("i=%d t=%llu packets=%llu bytes=%llu\n", i, values[i].time / 1000000000, values[i].packets, values[i].bytes);
+                do_expire=0;
+                break;
             }
-
+        }
+        if (do_expire) {
+            printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
+                V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
+            printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
+            bpf_map_delete_elem(v4_fd, &key);
+            flows_expired++;
         }
         prev_key = key;
     }
@@ -123,18 +129,23 @@ static bool expire_flows(int v4_fd, int v6_fd)
         }
 
         flows_total_v6++;
+        do_expire = 1;
         for (i = 0; i < nr_cpus; i++) {
-            if(values[i].time) {
-                int age = curtime.tv_sec - values[i].time / 1000000000;
-                if (age > FLOW_TIMEOUT_SECONDS) {
-                    printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
-                        V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
-                    printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
-                    bpf_map_delete_elem(v6_fd, &key6);
-                    flows_expired++;
-                }
+            int age = curtime.tv_sec - values[i].time / 1000000000;
+            if (age < FLOW_TIMEOUT_SECONDS) {
+                printf("not Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
+                    V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
+                printf("i=%d t=%llu packets=%llu bytes=%llu\n", i, values[i].time / 1000000000, values[i].packets, values[i].bytes);
+                do_expire=0;
+                break;
             }
-
+        }
+        if (do_expire) {
+            printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
+                V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
+            printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
+            bpf_map_delete_elem(v6_fd, &key6);
+            flows_expired++;
         }
         prev_key6 = key6;
     }
