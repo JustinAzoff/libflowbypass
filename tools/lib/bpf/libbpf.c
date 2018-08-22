@@ -228,6 +228,7 @@ struct bpf_object {
 	size_t nr_maps;
 
 	bool loaded;
+	const char *pin_path;
 
 	/*
 	 * Information when doing elf related work. Only valid if fd
@@ -1004,6 +1005,23 @@ bpf_object__create_maps(struct bpf_object *obj)
 	for (i = 0; i < obj->nr_maps; i++) {
 		struct bpf_map_def *def = &obj->maps[i].def;
 		int *pfd = &obj->maps[i].fd;
+
+		char buf[PATH_MAX];
+		int len;
+
+		if(obj->pin_path) {
+			len = snprintf(buf, PATH_MAX, "%s/%s", obj->pin_path, obj->maps[i].name);
+			if (len < 0)
+				return -EINVAL;
+			else if (len >= PATH_MAX)
+				return -ENAMETOOLONG;
+			*pfd = bpf_obj_get(buf);
+			if(*pfd > 0) {
+				pr_info(" - Loaded bpf-map:%s from file:%s\n",
+					obj->maps[i].name, buf);
+				continue;
+			}
+		}
 
 		*pfd = bpf_create_map_name(def->type,
 					   obj->maps[i].name,
@@ -2071,6 +2089,7 @@ int bpf_prog_load_xattr(const struct bpf_prog_load_attr *attr,
 		return -ENOENT;
 	}
 
+	obj->pin_path = attr->pin_path;
 	err = bpf_object__load(obj);
 	if (err) {
 		bpf_object__close(obj);

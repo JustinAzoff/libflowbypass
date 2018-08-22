@@ -197,6 +197,21 @@ static int flows_poll(struct bpf_object *pobj, int interval)
     return EXIT_OK;
 }
 
+int bpf_prog_load_pinned(const char *file, enum bpf_prog_type type,
+		  struct bpf_object **pobj, int *prog_fd, const char *pin_path)
+{
+	struct bpf_prog_load_attr attr;
+
+	memset(&attr, 0, sizeof(struct bpf_prog_load_attr));
+	attr.file = file;
+	attr.prog_type = type;
+	attr.expected_attach_type = 0;
+	attr.pin_path = pin_path;
+
+	return bpf_prog_load_xattr(&attr, pobj, prog_fd);
+}
+
+#define PIN_PATH "/sys/fs/bpf/autocutoff"
 #define MAX_PROGS 32
 int main(int argc, char **argv)
 {
@@ -248,11 +263,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if((ret=bpf_prog_load(filename, BPF_PROG_TYPE_XDP, &pobj, prog_fd)) < 0) {
+    if((ret=bpf_prog_load_pinned(filename, BPF_PROG_TYPE_XDP, &pobj, prog_fd, PIN_PATH)) < 0) {
         printf("bpf_prog_load: %s\n", strerror(ret));
         return 1;
     }
-
+    
     if (!prog_fd[0]) {
         printf("load_bpf_file: %s\n", strerror(errno));
         return 1;
@@ -266,12 +281,10 @@ int main(int argc, char **argv)
         return EXIT_FAIL_XDP;
     }
 
-    #ifdef PIN_MAPS_SOMEWHAT_BROKEN
-    if((ret=bpf_object__pin(pobj, "/sys/fs/bpf/autocutoff") < 0)) {
+    if((ret=bpf_object__pin(pobj, PIN_PATH) < 0)) {
         printf("bpf_object__pin: %s\n", strerror(errno));
         //return 1;
     }
-    #endif
 
 #define DEBUG 1
 #ifdef  DEBUG

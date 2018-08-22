@@ -250,6 +250,7 @@ long libbpf_get_error(const void *ptr);
 
 struct bpf_prog_load_attr {
 	const char *file;
+	const char *pin_path;
 	enum bpf_prog_type prog_type;
 	enum bpf_attach_type expected_attach_type;
 };
