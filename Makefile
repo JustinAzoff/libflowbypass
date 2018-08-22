@@ -4,7 +4,7 @@
 #
 # Still depend on a kernel source tree.
 #
-TARGETS += xdp_autocutoff
+TARGETS += xdp_autocutoff xdp_bypass
 
 
 #CMDLINE_TOOLS := xdp_ddos01_blacklist_cmdline
