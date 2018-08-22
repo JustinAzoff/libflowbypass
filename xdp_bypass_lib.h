@@ -36,7 +36,7 @@ int open_bpf_map(const char *file)
     return fd;
 }
 
-static int xdp_bypass_v4(int fd, char *src, int sport, char *dst, int dport)
+static int xdp_bypass_v4(int fd, int ip_proto, char *src, int sport, char *dst, int dport)
 {
     unsigned int nr_cpus = bpf_num_possible_cpus();
     struct pair values[nr_cpus];
@@ -70,6 +70,7 @@ static int xdp_bypass_v4(int fd, char *src, int sport, char *dst, int dport)
     }
     key.port16[0] = htons(sport);
     key.port16[1] = htons(dport);
+    key.ip_proto = ip_proto;
 
     clock_gettime(CLOCK_MONOTONIC, &curtime);
 
