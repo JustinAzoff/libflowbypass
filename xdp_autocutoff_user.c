@@ -191,8 +191,8 @@ static int flows_poll(struct bpf_object *pobj, int interval)
     int v6_fd = bpf_map__fd(flow_table_v6);
 
     while (1) {
-        sleep(interval);
         expire_flows(v4_fd, v6_fd);
+        sleep(interval);
     }
     return EXIT_OK;
 }
