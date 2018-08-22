@@ -178,7 +178,6 @@ u32 parse_ipv4(struct xdp_md *ctx, u64 l3_offset)
     int sport, dport;
     struct flowv4_keys tuple;
     struct pair *value;
-    struct pair new_value;
 
     tuple.ip_proto = (__u32) iph->protocol;
     tuple.src = iph->saddr;
@@ -218,7 +217,6 @@ u32 parse_ipv6(struct xdp_md *ctx, u64 l3_offset)
     int sport;
     struct flowv6_keys tuple;
     struct pair *value;
-    struct pair new_value;
 
     if ((void *)(ip6h + 1) > data_end)
         return 0;
