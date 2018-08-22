@@ -25,7 +25,7 @@ struct pair {
     __u64 time;
     __u64 packets;
     __u64 bytes;
-    __u64 log_after;
+//    __u64 log_after;
 } __attribute__((__aligned__(8)));
 
 #endif

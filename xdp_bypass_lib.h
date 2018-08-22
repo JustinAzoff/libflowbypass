@@ -41,9 +41,9 @@ static int xdp_bypass_v4(int fd, char *src, int sport, char *dst, int dport)
     unsigned int nr_cpus = bpf_num_possible_cpus();
     struct pair values[nr_cpus];
     struct flowv4_keys key;
+    struct timespec curtime;
     int res;
-
-    memset(values, 0, sizeof(struct pair) * nr_cpus);
+    int i;
 
     /* Convert IP-string into 32-bit network byte-order value */
     res = inet_pton(AF_INET, src, &(key.src));
@@ -70,6 +70,15 @@ static int xdp_bypass_v4(int fd, char *src, int sport, char *dst, int dport)
     }
     key.port16[0] = htons(sport);
     key.port16[1] = htons(dport);
+
+    clock_gettime(CLOCK_MONOTONIC, &curtime);
+
+    for(i=0; i < nr_cpus ; i++) {
+        values[i].time = curtime.tv_sec * 1000000000;
+        values[i].packets = 0;
+        values[i].bytes = 0;
+        //values[i].log_after = 0;
+    }
 
     res = bpf_map_update_elem(fd, &key, values, BPF_NOEXIST);
     if (res != 0) { /* 0 == success */
