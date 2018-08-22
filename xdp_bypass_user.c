@@ -248,8 +248,8 @@ int main(int argc, char **argv)
         return EXIT_FAIL_XDP;
     }
 
-    if((ret=bpf_object__pin(pobj, PIN_PATH) < 0)) {
-        printf("bpf_object__pin: %s\n", strerror(errno));
+    if((ret=bpf_object__pin_maps(pobj, PIN_PATH) < 0)) {
+        printf("bpf_object__pin_maps: %s\n", strerror(errno));
         //return 1;
     }
 
