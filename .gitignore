@@ -2,3 +2,4 @@
 *.ll
 xdp_autocutoff
 xdp_bypass
+xdp_bypass_cli

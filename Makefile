@@ -7,8 +7,8 @@
 TARGETS += xdp_autocutoff xdp_bypass
 
 
-#CMDLINE_TOOLS := xdp_ddos01_blacklist_cmdline
-#COMMON_H      =  ${CMDLINE_TOOLS:_cmdline=_common.h}
+CMDLINE_TOOLS := xdp_bypass_cli
+COMMON_H      =  ${CMDLINE_TOOLS:_cli=_lib.h}
 
 # Targets that use the library bpf/libbpf
 ### TARGETS_USING_LIBBPF += xdp_monitor_user

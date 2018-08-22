@@ -23,6 +23,7 @@ static const char *__doc__=
 #include "libbpf.h"
 #include "bpf_util.h"
 
+#include "xdp_bypass.h"
 
 static int ifindex = -1;
 
@@ -42,10 +43,6 @@ static const struct option long_options[] = {
 };
 
 /* Exit return codes */
-#define EXIT_OK         0
-#define EXIT_FAIL       1
-#define EXIT_FAIL_OPTION    2
-#define EXIT_FAIL_XDP       3
 
 static void usage(char *argv[])
 {
@@ -67,35 +64,6 @@ static void usage(char *argv[])
     }
     printf("\n");
 }
-
-struct flowv4_keys {
-    __u32 src;
-    __u32 dst;
-    union {
-        __u32 ports;
-        __u16 port16[2];
-    };
-    __u32 ip_proto;
-} __attribute__((__aligned__(8)));
-
-struct flowv6_keys {
-    __u32 src[4];
-    __u32 dst[4];
-    union {
-        __u32 ports;
-        __u16 port16[2];
-    };
-    __u32 ip_proto;
-} __attribute__((__aligned__(8)));
-
-struct pair {
-    __u64 time;
-    __u64 packets;
-    __u64 bytes;
-} __attribute__((__aligned__(8)));
-
-
-#define FLOW_TIMEOUT 10
 
 #define V4_IP_FORMAT "%d.%d.%d.%d"
 #define V4_IP_FORMAT_V(ip) \
@@ -133,7 +101,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
         for (i = 0; i < nr_cpus; i++) {
             if(values[i].time) {
                 int age = curtime.tv_sec - values[i].time / 1000000000;
-                if (age > FLOW_TIMEOUT) {
+                if (age > FLOW_TIMEOUT_SECONDS) {
                     printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
                         V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
@@ -157,7 +125,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
         for (i = 0; i < nr_cpus; i++) {
             if(values[i].time) {
                 int age = curtime.tv_sec - values[i].time / 1000000000;
-                if (age > FLOW_TIMEOUT) {
+                if (age > FLOW_TIMEOUT_SECONDS) {
                     printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
                         V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
                     printf("t=%llu packets=%llu bytes=%llu\n", values[i].time / 1000000000, values[i].packets, values[i].bytes);
@@ -211,7 +179,6 @@ int bpf_prog_load_pinned(const char *file, enum bpf_prog_type type,
 	return bpf_prog_load_xattr(&attr, pobj, prog_fd);
 }
 
-#define PIN_PATH "/sys/fs/bpf/autocutoff"
 #define MAX_PROGS 32
 int main(int argc, char **argv)
 {

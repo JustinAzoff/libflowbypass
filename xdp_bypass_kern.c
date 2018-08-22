@@ -15,36 +15,7 @@
 #include <uapi/linux/tcp.h>
 #include "bpf_helpers.h"
 
-#define MAX_FLOWS 512*1024
-#define CUTOFF_PACKETS 5024
-#define CUTOFF_BYTES 1*1024*1024
-
-struct flowv4_keys {
-    __u32 src;
-    __u32 dst;
-    union {
-        __u32 ports;
-        __u16 port16[2];
-    };
-    __u32 ip_proto;
-} __attribute__((__aligned__(8)));
-
-struct flowv6_keys {
-    __u32 src[4];
-    __u32 dst[4];
-    union {
-        __u32 ports;
-        __u16 port16[2];
-    };
-    __u32 ip_proto;
-} __attribute__((__aligned__(8)));
-
-
-struct pair {
-    __u64 time;
-    __u64 packets;
-    __u64 bytes;
-} __attribute__((__aligned__(8)));
+#include "xdp_bypass.h"
 
 struct bpf_map_def SEC("maps") flow_table_v4 = {
     .type = BPF_MAP_TYPE_PERCPU_HASH,
