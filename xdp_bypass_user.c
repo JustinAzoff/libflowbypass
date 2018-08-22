@@ -105,7 +105,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
                 if (age > FLOW_TIMEOUT_SECONDS) {
                     printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
                         V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
-                    printf("i=%d t=%llu packets=%llu bytes=%llu\n", i, values[i].time, values[i].packets, values[i].bytes);
+                    printf("i=%d t=%llu packets=%llu bytes=%llu\n", i, values[i].time / 1000000000, values[i].packets, values[i].bytes);
                     bpf_map_delete_elem(v4_fd, &key);
                     flows_expired++;
                 }
