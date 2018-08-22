@@ -1650,7 +1650,6 @@ int bpf_object__pin(struct bpf_object *obj, const char *path)
 
 int bpf_object__pin_maps(struct bpf_object *obj, const char *path)
 {
-	struct bpf_program *prog;
 	struct bpf_map *map;
 	int err;
 
