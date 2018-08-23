@@ -141,7 +141,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
         }
         prev_key = key;
     }
-    while (bpf_map_get_next_key_and_delete(v4_fd, &prev_key, &key, &delete_prev_key) == 0) {
+    while (bpf_map_get_next_key_and_delete(v6_fd, &prev_key6, &key6, &delete_prev_key) == 0) {
         int res = bpf_map_lookup_elem(v6_fd, &key6, values);
         if (res < 0) {
             //printf("no entry in v6 table for %d -> %d\n", key.port16[0], key.port16[1]);
