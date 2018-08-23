@@ -125,6 +125,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
             printf("packets=%lu bytes=%lu\n", packets, bytes);
             bpf_map_delete_elem(v4_fd, &key);
             flows_expired++;
+            flows_total_v4--;
         }
         prev_key = key;
     }
@@ -158,6 +159,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
             printf("packets=%lu bytes=%lu\n", packets, bytes);
             bpf_map_delete_elem(v6_fd, &key6);
             flows_expired++;
+            flows_total_v6--;
         }
         prev_key6 = key6;
     }
