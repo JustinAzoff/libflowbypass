@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     } else if(strcmp(proto, "udp")==0) {
         ip_proto = IPPROTO_UDP;
     } else {
-        fprintf(stderr, "Invalid Proto. should be tcp or udp");
+        fprintf(stderr, "Invalid Proto. should be tcp or udp\n");
         return 1;
     }
 
