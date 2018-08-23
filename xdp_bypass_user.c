@@ -75,6 +75,16 @@ static void usage(char *argv[])
 #define V6_IP_FORMAT "%s"
 #define V6_IP_FORMAT_V(ip) "..."
 
+int bpf_map_get_next_key_and_delete(int fd, const void *key, void *next_key, int *delete)
+{
+    int res = bpf_map_get_next_key(fd, key, next_key);
+    if (*delete) {
+        bpf_map_delete_elem(fd, key);
+        *delete = 0;
+    }
+    return res;
+}
+
 
 static bool expire_flows(int v4_fd, int v6_fd)
 {
@@ -91,8 +101,9 @@ static bool expire_flows(int v4_fd, int v6_fd)
     int do_expire = 0;
     uint64_t packets = 0;
     uint64_t bytes = 0;
+    int delete_prev_key = 0;
 
-    while (bpf_map_get_next_key(v4_fd, &prev_key, &key) == 0) {
+    while (bpf_map_get_next_key_and_delete(v4_fd, &prev_key, &key, &delete_prev_key) == 0) {
         int res = bpf_map_lookup_elem(v4_fd, &key, values);
         if (res < 0) {
             //printf("No Entry? Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
@@ -120,16 +131,17 @@ static bool expire_flows(int v4_fd, int v6_fd)
             }
         }
         if (do_expire) {
-            printf("Expired Flow v4: "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
+            printf("Expired Flow v4: %d "V4_IP_FORMAT":%d -> "V4_IP_FORMAT":%d ",
+                key.ip_proto,
                 V4_IP_FORMAT_V(key.src), ntohs(key.port16[0]), V4_IP_FORMAT_V(key.dst), ntohs(key.port16[1]));
             printf("packets=%lu bytes=%lu\n", packets, bytes);
-            bpf_map_delete_elem(v4_fd, &key);
             flows_expired++;
             flows_total_v4--;
+            delete_prev_key=1;
         }
         prev_key = key;
     }
-    while (bpf_map_get_next_key(v6_fd, &prev_key6, &key6) == 0) {
+    while (bpf_map_get_next_key_and_delete(v4_fd, &prev_key, &key, &delete_prev_key) == 0) {
         int res = bpf_map_lookup_elem(v6_fd, &key6, values);
         if (res < 0) {
             //printf("no entry in v6 table for %d -> %d\n", key.port16[0], key.port16[1]);
@@ -154,10 +166,11 @@ static bool expire_flows(int v4_fd, int v6_fd)
             }
         }
         if (do_expire) {
-            printf("Expired Flow v6: "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
+            printf("Expired Flow v6: %d "V6_IP_FORMAT":%d -> "V6_IP_FORMAT":%d ",
+                key.ip_proto,
                 V6_IP_FORMAT_V(key6.src), ntohs(key6.port16[0]), V6_IP_FORMAT_V(key6.dst), ntohs(key6.port16[1]));
             printf("packets=%lu bytes=%lu\n", packets, bytes);
-            bpf_map_delete_elem(v6_fd, &key6);
+            delete_prev_key=1;
             flows_expired++;
             flows_total_v6--;
         }
