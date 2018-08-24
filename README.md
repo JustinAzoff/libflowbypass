@@ -27,3 +27,28 @@ Some knobs you can change in xdp_autocutoff_kern.c are
     #define MAX_FLOWS 512*1024
     #define CUTOFF_PACKETS 1024
     #define CUTOFF_BYTES 512*1024
+
+# xdp_bypass
+
+This implements manual flow cutoff by using a BPF map exported to userspace.
+
+## Usage:
+
+    sudo   mount -t bpf bpf /sys/fs/bpf/
+    make && sudo ./xdp_bypass --ifname p1p1
+
+    #shunt a flow
+    sudo ./xdp_bypass_cli tcp 10.10.10.1 1234 192.168.100.1 80
+
+There is an example for Bro in [bypass.bro](bro/bypass.bro).  This should be
+ported to a BIF that uses xdp_bypass_lib.h directly.
+
+The cli does not need to be ran as root if you change the permissions on
+
+    /sys/fs/bpf/autocutoff/flow_table_v4
+    /sys/fs/bpf/autocutoff/flow_table_v6
+
+after they are created.
+
+Currently the two XDP programs use the same BPF maps to make testing easier,
+but it will likely be renamed later.
