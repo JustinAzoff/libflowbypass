@@ -31,6 +31,32 @@ struct bpf_map_def SEC("maps") flow_table_v6 = {
     .max_entries = MAX_FLOWS,
 };
 
+#define XDP_ACTION_MAX (XDP_TX + 1)
+
+/* Counter per XDP "action" verdict */
+struct bpf_map_def SEC("maps") verdict_cnt = {
+	.type = BPF_MAP_TYPE_PERCPU_ARRAY,
+	.key_size = sizeof(u32),
+	.value_size = sizeof(long),
+	.max_entries = XDP_ACTION_MAX,
+};
+
+/* Keeps stats of XDP_DROP vs XDP_PASS */
+static __always_inline
+void stats_action_verdict(u32 action)
+{
+	u64 *value;
+
+	if (action >= XDP_ACTION_MAX)
+		return;
+
+	value = bpf_map_lookup_elem(&verdict_cnt, &action);
+	if (value)
+		*value += 1;
+}
+
+
+
 static __always_inline int get_sport(void *trans_data, void *data_end,
         __u8 protocol)
 {
@@ -257,6 +283,7 @@ int  xdp_bypass_program(struct xdp_md *ctx)
     //bpf_debug("Reached L3: L3off:%llu proto:0x%x\n", l3_offset, eth_proto);
 
     action = handle_eth_protocol(ctx, eth_proto, l3_offset);
+    stats_action_verdict(action);
     return action;
 }
 
