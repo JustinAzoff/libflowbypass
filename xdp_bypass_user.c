@@ -25,14 +25,16 @@ static const char *__doc__=
 
 #include "xdp_bypass.h"
 
-static int ifindex = -1;
+static int if_indexes[5];
+static int if_indexes_cnt=0;
 
 static void int_exit(int sig)
 {
-    fprintf(stderr, "Interrupted: Removing XDP program on ifindex:%d\n",
-        ifindex);
-    if (ifindex > -1)
-        bpf_set_link_xdp_fd(ifindex, -1, 0);
+    for(int idx=0;idx < if_indexes_cnt; idx++) {
+        fprintf(stderr, "Interrupted: Removing XDP program on ifindex:%d\n",
+            if_indexes[idx]);
+        bpf_set_link_xdp_fd(if_indexes[idx], -1, 0);
+    }
     exit(0);
 }
 
@@ -229,6 +231,7 @@ int main(int argc, char **argv)
 
     struct bpf_object *pobj;
     int prog_fd[MAX_PROGS];
+    int ifindex;
 
     snprintf(filename, sizeof(filename), "%s_kern.o", argv[0]);
 
@@ -238,6 +241,11 @@ int main(int argc, char **argv)
         switch (opt) {
         case 'i':
             ifname = optarg;
+            if((ifindex=if_nametoindex(ifname)) == 0) {
+                perror("Can't find interface");
+                return EXIT_FAIL_OPTION;
+            }
+            if_indexes[if_indexes_cnt++] = ifindex;
             break;
         case 'h':
         default:
@@ -246,18 +254,8 @@ int main(int argc, char **argv)
         }
     }
     /* Required options */
-    if (ifname==NULL) {
+    if (if_indexes_cnt==0) {
         printf("**Error**: required option --ifname missing");
-        usage(argv);
-        return EXIT_FAIL_OPTION;
-    }
-    if((ifindex=if_nametoindex(ifname)) == 0) {
-        perror("Can't find interface");
-        return EXIT_FAIL_OPTION;
-    }
-    /* Required options */
-    if (ifindex == -1) {
-        printf("**Error**: required option --ifindex missing");
         usage(argv);
         return EXIT_FAIL_OPTION;
     }
@@ -281,9 +279,11 @@ int main(int argc, char **argv)
     /* Remove XDP program when program is interrupted */
     signal(SIGINT, int_exit);
 
-    if (bpf_set_link_xdp_fd(ifindex, prog_fd[0], 0) < 0) {
-        printf("link set xdp fd failed\n");
-        return EXIT_FAIL_XDP;
+    for(int idx=0;idx < if_indexes_cnt; idx++) {
+        if (bpf_set_link_xdp_fd(if_indexes[idx], prog_fd[0], 0) < 0) {
+            printf("link set xdp fd failed\n");
+            return EXIT_FAIL_XDP;
+        }
     }
 
     if((ret=bpf_object__pin_maps(pobj, PIN_PATH) < 0)) {
@@ -302,5 +302,5 @@ int main(int argc, char **argv)
 #endif
 
 
-    return flows_poll(pobj, 1);
+    return flows_poll(pobj, 5);
 }
