@@ -189,6 +189,7 @@ static bool expire_flows(int v4_fd, int v6_fd)
         prev_key6 = key6;
     }
     printf("Flows: total=%d v4=%d v6=%d expired=%d\n", flows_total_v4+flows_total_v6, flows_total_v4, flows_total_v6, flows_expired);
+    fflush(stdout);
 
     return false;
 }
