@@ -67,6 +67,8 @@ static void usage(char *argv[])
     printf("\n");
 }
 
+
+//FIXME: I should have just converted and used inet_ntop
 #define V4_IP_FORMAT "%d.%d.%d.%d"
 #define V4_IP_FORMAT_V(ip) \
     (ip & 0xFF), \
@@ -74,8 +76,16 @@ static void usage(char *argv[])
     ((ip >> 16) & 0xFF), \
     ((ip >> 24) & 0xFF)
 
-#define V6_IP_FORMAT "%s"
-#define V6_IP_FORMAT_V(ip) "..."
+#define V6_IP_FORMAT "[%x:%x:%x:%x:%x:%x:%x:%x]"
+#define V6_IP_FORMAT_V(ip) \
+    (ntohs(ip[0] & 0xffff)), \
+    (ntohs((ip[0] >> 16) & 0xffff)), \
+    (ntohs(ip[1] & 0xffff)), \
+    (ntohs((ip[1] >> 16) & 0xffff)), \
+    (ntohs(ip[2] & 0xffff)), \
+    (ntohs((ip[2] >> 16) & 0xffff)), \
+    (ntohs(ip[3] & 0xffff)), \
+    (ntohs((ip[3] >> 16) & 0xffff))
 
 int bpf_map_get_next_key_and_delete(int fd, const void *key, void *next_key, int *delete)
 {

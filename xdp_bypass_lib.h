@@ -81,13 +81,38 @@ int xdp_bypass_open_v6(bypass_ctx *ctx)
     return 0;
 }
 
-static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
+/* Insert a new flow tuple into the bypass maps */
+int xdp_bypass_map_update(bypass_ctx *ctx, int fd, void *key)
 {
     struct pair values[ctx->nr_cpus];
-    struct flowv4_keys key;
     struct timespec curtime;
+
+    clock_gettime(CLOCK_MONOTONIC, &curtime);
+
+    for(int i=0; i < ctx->nr_cpus ; i++) {
+        values[i].time = curtime.tv_sec * 1000000000;
+        values[i].packets = 0;
+        values[i].bytes = 0;
+        //values[i].log_after = 0;
+    }
+
+    int res = bpf_map_update_elem(fd, key, values, BPF_NOEXIST);
+    if (res != 0) { /* 0 == success */
+        if (errno == 17) {
+            fprintf(stderr, "Already Bypassed\n");
+            return EXIT_OK;
+        }
+        /* next caller will reopen */
+        xdp_bypass_close(ctx);
+        return EXIT_FAIL_MAP_KEY;
+    }
+    return EXIT_OK;
+}
+
+static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
+{
+    struct flowv4_keys key;
     int res;
-    int i;
 
     /* Convert IP-string into 32-bit network byte-order value */
     res = inet_pton(AF_INET, src, &(key.src));
@@ -116,36 +141,54 @@ static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, ch
     key.port16[1] = htons(dport);
     key.ip_proto = ip_proto;
 
-    clock_gettime(CLOCK_MONOTONIC, &curtime);
-
-    for(i=0; i < ctx->nr_cpus ; i++) {
-        values[i].time = curtime.tv_sec * 1000000000;
-        values[i].packets = 0;
-        values[i].bytes = 0;
-        //values[i].log_after = 0;
-    }
     res=xdp_bypass_open_v4(ctx);
     if(res != 0) {
         return -1;
     }
-
-    res = bpf_map_update_elem(ctx->v4_fd, &key, values, BPF_NOEXIST);
-    if (res != 0) { /* 0 == success */
-        if (errno == 17) {
-            fprintf(stderr, "Already Bypassed\n");
-            return EXIT_OK;
-        }
-        /* next caller will reopen */
-        xdp_bypass_close(ctx);
-        return EXIT_FAIL_MAP_KEY;
-    }
-    return EXIT_OK;
+    return xdp_bypass_map_update(ctx, ctx->v4_fd, &key);
 }
+
 static int xdp_bypass_v6(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
 {
-    /* FIXME: TODO */
-    return -1;
+    struct flowv6_keys key;
+    int res;
+
+    /* Convert IP-string into 128-bit network byte-order value */
+    res = inet_pton(AF_INET6, src, &(key.src));
+    if (res <= 0) {
+        if (res == 0)
+            fprintf(stderr,
+                "ERR: IPv6 \"%s\" not in presentation format\n",
+                src);
+        else
+            perror("inet_pton");
+        return -1;
+    }
+
+    /* Convert IP-string into 128-bit network byte-order value */
+    res = inet_pton(AF_INET6, dst, &(key.dst));
+    if (res <= 0) {
+        if (res == 0)
+            fprintf(stderr,
+                "ERR: IPv6 \"%s\" not in presentation format\n",
+                dst);
+        else
+            perror("inet_pton");
+        return -1;
+    }
+    key.port16[0] = htons(sport);
+    key.port16[1] = htons(dport);
+    key.ip_proto = ip_proto;
+
+
+    res=xdp_bypass_open_v6(ctx);
+    if(res != 0) {
+        return -1;
+    }
+
+    return xdp_bypass_map_update(ctx, ctx->v6_fd, &key);
 }
+
 
 /* FIXME: something in posix for this? */
 int ip_family_from_string(char *s)
