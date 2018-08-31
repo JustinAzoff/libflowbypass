@@ -6,7 +6,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s proto src sport dst dport\n", argv[0]);
         return 1;
     }
-    bypass_ctx* ctx = xdp_bypass_init();
 
     char *proto = argv[1];
     int ip_proto;
@@ -25,6 +24,7 @@ int main(int argc, char **argv) {
     char *dst = argv[4];
     int dport = atoi(argv[5]);
 
+    bypass_ctx* ctx = xdp_bypass_init();
     res = xdp_bypass(ctx, ip_proto, src, sport, dst, dport);
     printf("Res: %d\n", res);
     xdp_bypass_close(ctx);
