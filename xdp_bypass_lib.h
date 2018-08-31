@@ -151,9 +151,7 @@ static int xdp_bypass_v6(bypass_ctx *ctx, int ip_proto, char *src, int sport, ch
 int ip_family_from_string(char *s)
 {
     if (strchr(s, '.') != NULL) return 4;
-    else
     if (strchr(s, ':') != NULL) return 6;
-    else
     return 0;
 }
 
