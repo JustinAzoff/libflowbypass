@@ -23,20 +23,63 @@
 
 #include "xdp_bypass.h"
 
-int open_bpf_map(const char *file)
-{
-    int fd;
+typedef struct t_bypass_ctx {
+    int v4_fd;
+    int v6_fd;
+} bypass_ctx;
 
-    fd = bpf_obj_get(file);
-    if (fd < 0) {
-        printf("ERR: Failed to open bpf map file:%s err(%d):%s\n",
-               file, errno, strerror(errno));
-        exit(EXIT_FAIL_MAP_FILE);
-    }
-    return fd;
+bypass_ctx * xdp_bypass_init()
+{
+    bypass_ctx *ctx;
+    ctx = malloc(sizeof(bypass_ctx));
+    memset(ctx, 0, sizeof(bypass_ctx));
+    return ctx;
 }
 
-static int xdp_bypass_v4(int fd, int ip_proto, char *src, int sport, char *dst, int dport)
+void xdp_bypass_close(bypass_ctx *ctx)
+{
+    if(ctx->v4_fd > 0) {
+        close(ctx->v4_fd);
+        ctx->v4_fd = 0;
+    }
+    if(ctx->v6_fd > 0) {
+        close(ctx->v6_fd);
+        ctx->v6_fd = 0;
+    }
+}
+//FIXME: what to do with errno?
+int xdp_bypass_open_v4(bypass_ctx *ctx)
+{
+    if(ctx->v4_fd > 0) {
+        return 0;
+    }
+    int fd = bpf_obj_get(PIN_PATH "/flow_table_v4");
+    if (fd < 0) {
+        printf("ERR: Failed to open bpf map file:%s err(%d):%s\n",
+               PIN_PATH "/flow_table_v4", errno, strerror(errno));
+        return fd;
+    }
+    ctx->v4_fd = fd;
+
+    return 0;
+}
+int xdp_bypass_open_v6(bypass_ctx *ctx)
+{
+    if(ctx->v6_fd > 0) {
+        return 0;
+    }
+    int fd = bpf_obj_get(PIN_PATH "/flow_table_v6");
+    if (fd < 0) {
+        printf("ERR: Failed to open bpf map file:%s err(%d):%s\n",
+               PIN_PATH "/flow_table_v6", errno, strerror(errno));
+        return fd;
+    }
+    ctx->v6_fd = fd;
+
+    return 0;
+}
+
+static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
 {
     unsigned int nr_cpus = bpf_num_possible_cpus();
     struct pair values[nr_cpus];
@@ -80,14 +123,19 @@ static int xdp_bypass_v4(int fd, int ip_proto, char *src, int sport, char *dst, 
         values[i].bytes = 0;
         //values[i].log_after = 0;
     }
+    res=xdp_bypass_open_v4(ctx);
+    if(res != 0) {
+        return -1;
+    }
 
-    res = bpf_map_update_elem(fd, &key, values, BPF_NOEXIST);
+    res = bpf_map_update_elem(ctx->v4_fd, &key, values, BPF_NOEXIST);
     if (res != 0) { /* 0 == success */
         if (errno == 17) {
-            fprintf(stderr, ": Already Bypassed\n");
+            fprintf(stderr, "Already Bypassed\n");
             return EXIT_OK;
         }
-        fprintf(stderr, "\n");
+        /* next caller will reopen */
+        xdp_bypass_close(ctx);
         return EXIT_FAIL_MAP_KEY;
     }
     return EXIT_OK;

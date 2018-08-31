@@ -1,14 +1,12 @@
 #include "xdp_bypass_lib.h"
 
 int main(int argc, char **argv) {
-    int fd = 0;
     int res;
     if(argc < 6) {
         fprintf(stderr, "Usage: %s proto src sport dst dport\n", argv[0]);
         return 1;
     }
-    fd = open_bpf_map(PIN_PATH "/flow_table_v4");
-
+    bypass_ctx* ctx = xdp_bypass_init();
 
     char *proto = argv[1];
     int ip_proto;
@@ -27,7 +25,8 @@ int main(int argc, char **argv) {
     char *dst = argv[4];
     int dport = atoi(argv[5]);
 
-    res = xdp_bypass_v4(fd, ip_proto, src, sport, dst, dport);
+    res = xdp_bypass_v4(ctx, ip_proto, src, sport, dst, dport);
     printf("Res: %d\n", res);
+    xdp_bypass_close(ctx);
     return res;
 }
