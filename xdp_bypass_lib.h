@@ -140,4 +140,33 @@ static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, ch
     }
     return EXIT_OK;
 }
+static int xdp_bypass_v6(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
+{
+    /* FIXME: TODO */
+    return -1;
+}
+
+/* FIXME: something in posix for this? */
+int ip_family_from_string(char *s)
+{
+    if (strchr(s, '.') != NULL) return 4;
+    else
+    if (strchr(s, ':') != NULL) return 6;
+    else
+    return 0;
+}
+
+static int xdp_bypass(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
+{
+    int family = ip_family_from_string(src);
+    switch(family) {
+        case 4:
+            return xdp_bypass_v4(ctx, ip_proto, src, sport, dst, dport);
+        case 6:
+            return xdp_bypass_v6(ctx, ip_proto, src, sport, dst, dport);
+        default:
+            /* FIXME: what do? */
+            return -1;
+    }
+}
 #endif

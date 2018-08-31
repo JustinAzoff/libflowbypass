@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     char *dst = argv[4];
     int dport = atoi(argv[5]);
 
-    res = xdp_bypass_v4(ctx, ip_proto, src, sport, dst, dport);
+    res = xdp_bypass(ctx, ip_proto, src, sport, dst, dport);
     printf("Res: %d\n", res);
     xdp_bypass_close(ctx);
     return res;
