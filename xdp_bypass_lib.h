@@ -26,6 +26,7 @@
 typedef struct t_bypass_ctx {
     int v4_fd;
     int v6_fd;
+    unsigned int nr_cpus;
 } bypass_ctx;
 
 bypass_ctx * xdp_bypass_init()
@@ -33,6 +34,7 @@ bypass_ctx * xdp_bypass_init()
     bypass_ctx *ctx;
     ctx = malloc(sizeof(bypass_ctx));
     memset(ctx, 0, sizeof(bypass_ctx));
+    ctx->nr_cpus = bpf_num_possible_cpus();
     return ctx;
 }
 
@@ -81,8 +83,7 @@ int xdp_bypass_open_v6(bypass_ctx *ctx)
 
 static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, char *dst, int dport)
 {
-    unsigned int nr_cpus = bpf_num_possible_cpus();
-    struct pair values[nr_cpus];
+    struct pair values[ctx->nr_cpus];
     struct flowv4_keys key;
     struct timespec curtime;
     int res;
@@ -117,7 +118,7 @@ static int xdp_bypass_v4(bypass_ctx *ctx, int ip_proto, char *src, int sport, ch
 
     clock_gettime(CLOCK_MONOTONIC, &curtime);
 
-    for(i=0; i < nr_cpus ; i++) {
+    for(i=0; i < ctx->nr_cpus ; i++) {
         values[i].time = curtime.tv_sec * 1000000000;
         values[i].packets = 0;
         values[i].bytes = 0;
