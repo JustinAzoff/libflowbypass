@@ -15,6 +15,7 @@ see how they react when flows are cutoff.
 
 ## Usage:
 
+    sudo sysctl net/core/bpf_jit_enable=1
     make && sudo ./xdp_autocutoff --ifname p1p1
 
 NOTE: this will COMPLETELY DROP packets inside the kernel, so if you run this
@@ -34,6 +35,7 @@ This implements manual flow cutoff by using a BPF map exported to userspace.
 
 ## Usage:
 
+    sudo sysctl net/core/bpf_jit_enable=1
     sudo   mount -t bpf bpf /sys/fs/bpf/
     make && sudo ./xdp_bypass --ifname p1p1
 
